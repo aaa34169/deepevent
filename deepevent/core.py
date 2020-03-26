@@ -1,16 +1,12 @@
 # coding: utf-8
 import os
 import argparse
-from keras.models import model_from_json
 from pyBTK import btk
-import numpy as np
 from scipy import signal
 from scipy.signal import argrelextrema
-from numpy import matlib as mb
-import pdb
-import logging
 import numpy as np
-import deepevent
+from numpy import matlib as mb
+import logging
 
 def filter(acq,marker,fc):
 	# Butterworth filter
@@ -133,99 +129,3 @@ def predict(load_model,acq,markers,pfn,freq):
 	eventRFO = np.argwhere(predicted_seuil_max[0,:,4])
 
 	return eventLFS,eventRFS,eventLFO,eventRFO
-
-
-def main(args):
-
-	import pdb; pdb.set_trace()
-	json_file = open(deepevent.DATA_PATH+'DeepEventModel.json','r')
-	loaded_model_json = json_file.read()
-	json_file.close()
-
-	model = model_from_json(loaded_model_json)
-	model.load_weights(deepevent.DATA_PATH+"DeepEventWeight.h5")
-
-	filenameIn = args.input
-	if args.output is not None:
-		filenameOut = args.output
-	else:
-		filenameOut = args.input
-		logging.warning("[deepevent] input will be overwritten")
-
-
-	acq0 = read(filenameIn)
-	acq0.ClearEvents()
-
-	acqF = btk.btkAcquisition.Clone(acq0)
-	pfn = acqF.GetPointFrameNumber()
-	freq = acqF.GetPointFrequency()
-	ff = acqF.GetFirstFrame()
-
-	md = acq0.GetMetaData()
-	SubjectInfo = md.FindChild("SUBJECTS").value().FindChild("NAMES").value().GetInfo()
-	SubjectValue = SubjectInfo.ToString()
-
-	markers = ["LANK","RANK","LTOE","RTOE","LHEE","RHEE"]
-
-	globalFrame,forwardProgression = progressionframe(acq0)
-	for marker in markers:
-		applyRotation(acq0,marker,globalFrame,forwardProgression)
-
-
-	eventLFS,eventRFS,eventLFO,eventRFO = predict(model,acq0,markers,pfn,freq)
-
-	for ind_indice in range(eventLFS.shape[0]):
-	    newEvent=btk.btkEvent()
-	    newEvent.SetLabel("Foot Strike")
-	    newEvent.SetContext("Left")
-	    newEvent.SetTime((ff-1)/freq + float(eventLFS[ind_indice]/freq))
-	    newEvent.SetSubject(SubjectValue[0])
-	    newEvent.SetId(1)
-	    acqF.AppendEvent(newEvent)
-
-	for ind_indice in range(eventRFS.shape[0]):
-		newEvent=btk.btkEvent()
-		newEvent.SetLabel("Foot Strike")
-		newEvent.SetContext("Right")
-		newEvent.SetTime((ff-1)/freq + float(eventRFS[ind_indice]/freq))
-		newEvent.SetSubject(SubjectValue[0])
-		newEvent.SetId(1)
-		acqF.AppendEvent(newEvent)
-
-	for ind_indice in range(eventLFO.shape[0]):
-		newEvent=btk.btkEvent()
-		newEvent.SetLabel("Foot Off")
-		newEvent.SetContext("Left") #
-		newEvent.SetTime((ff-1)/freq + float(eventLFO[ind_indice]/freq))
-		newEvent.SetSubject(SubjectValue[0])
-		newEvent.SetId(2)
-		acqF.AppendEvent(newEvent)
-
-	for ind_indice in range(eventRFO.shape[0]):
-		newEvent=btk.btkEvent()
-		newEvent.SetLabel("Foot Off")
-		newEvent.SetContext("Right") #
-		newEvent.SetTime((ff-1)/freq + float(eventRFO[ind_indice]/freq))
-		newEvent.SetSubject(SubjectValue[0])
-		newEvent.SetId(2)
-		acqF.AppendEvent(newEvent)
-
-	save(acqF,filenameOut)
-
-if __name__ == "__main__":
-
-	parser = argparse.ArgumentParser()
-	parser.add_argument('-i','--input',help='* input c3d file',type=str)
-	parser.add_argument('-o','--output',help=' output c3d file with events',type=str)
-	args = parser.parse_args()
-
-
-	main(args)
-
-	# args.FilenameIn= "Yaxis_backward_walking.c3d"
-	# args.FilenameOut = "Yaxis_backward_walking-OUT.c3d"
-	# main(args.FilenameIn,args.FilenameOut)
-
-	# args.FilenameIn= "Yaxis_walking.c3d"
-	# args.FilenameOut = "Yaxis_walking-OUT.c3d"
-	# compute(args.FilenameIn,args.FilenameOut)
